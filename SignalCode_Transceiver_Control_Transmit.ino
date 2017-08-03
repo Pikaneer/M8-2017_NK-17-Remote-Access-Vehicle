@@ -1,0 +1,108 @@
+#include <SPI.h>
+#include <RF24.h>
+#include <TimerOne.h>
+
+byte data[8] = {LOW};
+int dataPin = 2;
+int clockPin = 3;
+int latchPin = 4;
+
+RF24 radio(9, 10);
+byte addresses[][6] = {"Pika9", "Pika8"};
+
+int Command_PikaCentral[2] = {0, 0};
+String serialString;
+struct package {
+  int b1; 
+  int b2;
+  } go;
+
+
+bool role = 1;
+bool radioNumber = 1;
+
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  Serial.println("beginning...");
+
+   //SHIFT REGISTER INITIALIZE
+  pinMode(dataPin, OUTPUT); //
+  pinMode(clockPin, OUTPUT); //
+  pinMode(latchPin, OUTPUT); //
+  digitalWrite(dataPin, LOW);
+  digitalWrite(clockPin, LOW);
+  digitalWrite(latchPin, LOW);
+
+  data[6] = LOW;
+  shiftUpdate_8(data);
+
+  //SERIAL INITIALISATION
+  radio.begin();
+  radio.setPALevel(RF24_PA_LOW);
+  radio.openWritingPipe(addresses[1]);
+  radio.openReadingPipe(1, addresses[0]);
+  radio.setPayloadSize(32);
+
+  //TIMER INITIALIZE
+ // Timer1.initialize(50000);
+ // Timer1.attachInterrupt(transmit);
+  Serial.println("Setup complete.");
+}
+
+void shiftUpdate_8(byte data[8])
+{
+  digitalWrite(latchPin, LOW); //Temporary maintenance shutdown to prevent interference
+  digitalWrite(dataPin, LOW); digitalWrite(clockPin, LOW); //defaulting to lwo
+  digitalWrite(dataPin, data[0]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[1]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[2]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[3]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[4]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[5]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[6]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[7]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(latchPin, HIGH); //...And right back up again! Mon dieu, c'était très fatigant, non?
+}
+
+void comms() {
+  radio.stopListening();
+  if(radio.write(&go, sizeof(go)), Serial.println("mew"));
+  radio.startListening();
+}
+
+
+void loop() {
+  // put your main code here, to run repeatedly:
+
+  //COMMUNICATION ROUTINE——————————————————————————————————————————————————————————————————————————————————————————————
+  //Transmit Routine
+  
+    radio.stopListening();
+    if(radio.write(&go, sizeof(go)), Serial.println("Forward/Backwards: " + String(go.b1) + "     " + "Left/Right: " + String(go.b2)));
+    radio.startListening();
+  
+
+  //OPERATIONAL ROUTINE
+  if(Serial.available()) {
+    serialString = Serial.readString(); 
+    //Serial.println(serialString); 
+    go.b1 = (serialString.substring(0, 3)).toInt();
+    go.b2 = (serialString.substring(4, 7)).toInt();
+    serialString = "";
+    
+    Serial.println("Forward/Backwards: " + String(go.b1));
+    Serial.println("Left/Right: " + String(go.b2));
+
+    Serial.flush();
+  }
+
+  data[6] = HIGH;
+  shiftUpdate_8(data);
+  delay(25);
+  data[6] = LOW;
+  shiftUpdate_8(data);
+  delay(25);
+  
+}

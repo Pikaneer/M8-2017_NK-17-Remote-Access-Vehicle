@@ -1,0 +1,125 @@
+//libraries & snazzy stuff
+#include <SPI.h>
+#include <RF24.h>
+#include <TimerOne.h>
+#include <StackArray.h>
+
+RF24 radio(9, 10);
+byte addresses[][6] = {"Pika9", "Pika8"};
+
+int Mctrl[2] = {0, 0};
+int motCtrl[2] = {0, 0};
+
+int dataPin = 3;
+int clockPin = 7;
+int latchPin = 8;
+byte data[8] = {LOW};
+struct package {int b1; int b2;} go;
+
+int latencytimer;
+
+bool role = 0;
+bool radioNumber = 0;
+
+void setup() {
+//resetpin setup
+digitalWrite(A0, HIGH);
+  
+  Serial.begin(9600);
+  pinMode(5, OUTPUT); //SPEED[A]
+  pinMode(6, OUTPUT); //SPEED[B]
+
+  pinMode(4, OUTPUT); //ULTRASONIC SENSOR PING
+  pinMode(2, INPUT); //ULTRASONIC SENSOR INPUT
+
+  //Shift Register Pins
+  pinMode(dataPin, OUTPUT); //
+  pinMode(clockPin, OUTPUT); //
+  pinMode(latchPin, OUTPUT); //
+  digitalWrite(dataPin, LOW);
+  digitalWrite(clockPin, LOW);
+  digitalWrite(latchPin, LOW);
+
+  //RESET pin
+  pinMode(A0, OUTPUT);
+
+  Serial.println("beginning...");
+  //Direction, brake, and servo controls are to be accessed through the shift register.
+
+  //RF24 INITIALISATION
+  radio.begin();
+  radio.setPALevel(RF24_PA_LOW);
+  radio.openWritingPipe(addresses[0]);
+  radio.openReadingPipe(1, addresses[1]);
+  radio.setPayloadSize(32);
+  radio.startListening();
+
+  //TIMER INITIALISE
+  //Timer1.initialize(50000);
+  //Timer1.attachInterrupt(comms);
+}
+
+
+
+void shiftUpdate_8(byte data[8])
+{
+  digitalWrite(latchPin, LOW); //Temporary maintenance shutdown to prevent interference
+  digitalWrite(dataPin, LOW); digitalWrite(clockPin, LOW); //defaulting to lwo
+  digitalWrite(dataPin, data[0]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[1]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[2]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[3]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[4]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[5]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[6]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(dataPin, data[7]); digitalWrite(clockPin, HIGH); digitalWrite(clockPin, LOW);
+  digitalWrite(latchPin, HIGH); //...And right back up again! Mon dieu, c'était très fatigant, non?
+}
+
+void comms() {
+    //COMMUNICATION ROUTINE——————————————————————————————————————————————————————————————————————————————————————————————
+  latencytimer = 0;
+  while(!radio.available()) {}
+  if(radio.available()){
+      radio.read(&go,sizeof(go));
+      Serial.println(String(go.b1) + " " + String(go.b2));
+  } 
+  else {} 
+  Mctrl[0] = map(go.b1, 0, 100, -255, 255);
+  Mctrl[1] = map(go.b2, 0, 100, -255, 255);
+  
+  //Serial.println("Completed Comms Routine.");
+  //END OF COMMUNICATION ROUTINE——————————————————————————————————————————————————————————————————————————————————————
+}
+
+void resetControl() {
+  digitalWrite(A0, LOW);
+  Serial.println("If you see this, you know you've fucked shit up.");
+}
+
+
+void loop() {
+  //Serial.println("loop");
+  comms();
+
+
+  //PROCESSING
+  motCtrl[0] = Mctrl[0];
+  motCtrl[1] = Mctrl[1];
+
+  //INITIALISING ROUTINE———————————————————————————————————————————————————————————————————————————————————————————————
+  //MOTOR RUN CYCLE + FINAL REGULATION
+  if (motCtrl[0] > 0) {digitalWrite(A2, HIGH); digitalWrite(A3, LOW);} //DIRECTION_CONTROL
+  if (motCtrl[0] < 0) {digitalWrite(A2, LOW); digitalWrite(A3, HIGH);}
+  if (motCtrl[1] > 0) {digitalWrite(A4, HIGH); digitalWrite(A5, LOW);}
+  if (motCtrl[1] < 0) {digitalWrite(A4, LOW); digitalWrite(A5, HIGH);}
+  
+  analogWrite(5, abs(motCtrl[0])); //SPEED INPUT
+  analogWrite(6, abs(motCtrl[1]));
+//  Serial.println("Completed Action Routine.");
+  //Serial.println(String(motCtrl[0]) + " " + String(motCtrl[1]));
+  //END OF INITIALISING ROUTINE————————————————————————————————————————————————————————————————————————————————————————
+
+  //END: DELAY MAY BE IMPLEMENTED
+  delay(50);
+}
